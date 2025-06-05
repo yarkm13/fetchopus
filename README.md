@@ -1,4 +1,4 @@
-# FTP Downloader
+# Fetchopus
 
 A multiprotocol multithread file downloader written in Go, designed to handle large downloads jobs with resume capability.
 
