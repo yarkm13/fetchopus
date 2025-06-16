@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net/url"
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,6 +22,7 @@ func (f *FTPConnectorFactory) Create(u *url.URL, password []byte) (Connector, er
 }
 
 func (f *FTPConnectorFactory) Name() string {
+
 	return "ftp"
 }
 
@@ -115,10 +113,10 @@ func (f *FTPConnector) ListFilesRecursively(base string) ([]string, error) {
 	return files, err
 }
 
-func (f *FTPConnector) DownloadFile(remotePath, localPath string) error {
+func (f *FTPConnector) DownloadFile(remotePath, localBasePath string, basePath string) error {
 	var err error
 	for attempts := 0; attempts < 3; attempts++ {
-		err = f.downloadFileOnce(remotePath, localPath)
+		err = f.downloadFileOnce(remotePath, localBasePath, basePath)
 		if err == nil {
 			return nil
 		}
@@ -127,20 +125,14 @@ func (f *FTPConnector) DownloadFile(remotePath, localPath string) error {
 	return fmt.Errorf("failed after 3 attempts: %w", err)
 }
 
-func (f *FTPConnector) downloadFileOnce(remotePath, localPath string) error {
+func (f *FTPConnector) downloadFileOnce(remotePath, localBasePath string, basePath string) error {
 	r, err := f.client.Retr(remotePath)
 	if err != nil {
 		return err
 	}
 	defer r.Close()
-	os.MkdirAll(filepath.Dir(localPath), 0755)
-	out, err := os.Create(localPath)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	_, err = io.Copy(out, r)
-	return err
+
+	return saveRemoteFile(remotePath, localBasePath, basePath, r)
 }
 
 func (f *FTPConnector) Close() error {

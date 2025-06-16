@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/url"
 	"sync"
@@ -12,7 +13,7 @@ import (
 )
 
 func main() {
-	urlFlag := flag.String("url", "", "Source URL (ftp:// or sftp://)")
+	urlFlag := flag.String("url", "", "Source URL (ftp:// or scp://)")
 	targetFlag := flag.String("target-dir", "", "Target directory")
 	threadsFlag := flag.Int("threads", 4, "Number of download threads")
 	jobFlag := flag.String("job", "", "Resume from job file")
@@ -47,7 +48,7 @@ func main() {
 		passwordStr, passSet := u.User.Password()
 		if !passSet {
 			password = askPassword()
-			//u.User = url.UserPassword(u.User.Username(), password)
+			fmt.Println("Password saved")
 		} else {
 			password = make([]byte, len(passwordStr))
 			copy(password, []byte(passwordStr))
@@ -67,7 +68,7 @@ func main() {
 	}
 	connector, err = connectorFactory.Create(u, password)
 	if err != nil {
-		log.Fatalf("FTP error: %v", err)
+		log.Fatalf("Connection error: %v", err)
 	}
 	defer connector.Close()
 	if len(job.Items) < 1 {

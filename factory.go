@@ -6,7 +6,8 @@ import (
 
 var connectorFactories = []ConnectorFactory{
 	&FTPConnectorFactory{},
-	// add more like &SFTPConnectorFactory{}
+	&SCPConnectorFactory{},
+	// add more
 }
 
 func getConnectorFactory(u *url.URL) ConnectorFactory {

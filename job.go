@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -48,7 +47,7 @@ func parseJobFile(filename string) (*Job, error) {
 			if len(parts) != 2 {
 				continue
 			}
-			status := 0
+			status := 0 // all "in progress" statuses will be reset
 			if parts[0] == "1" {
 				status = 1
 			}
@@ -108,10 +107,9 @@ func downloadWorker(job *Job, factory ConnectorFactory, password []byte, wg *syn
 			return // No more jobs
 		}
 
-		localPath := filepath.Join(job.TargetDir, item.Path)
 		log.Printf("[Worker %d] Downloading: %s", index, item.Path)
 
-		err := conn.DownloadFile(item.Path, localPath)
+		err := conn.DownloadFile(item.Path, job.TargetDir, job.SourceURL.Path)
 		if err != nil {
 			log.Printf("[Worker %d] Error downloading %s: %v", index, item.Path, err)
 			// Retry: set it back to pending

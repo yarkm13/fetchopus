@@ -7,7 +7,7 @@ import (
 // Connector interface for remote file operations
 type Connector interface {
 	ListFilesRecursively(base string) ([]string, error)
-	DownloadFile(remotePath, localPath string) error
+	DownloadFile(remotePath, localBasePath string, basePath string) error
 	Close() error
 }
 
