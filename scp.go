@@ -156,7 +156,8 @@ func (s *SCPConnector) DownloadFile(remotePath, localBasePath string, basePath s
 		return fmt.Errorf("failed to get stdin pipe: %w", err)
 	}
 
-	if err := session.Start(fmt.Sprintf("scp -f '%s'", remotePath)); err != nil {
+	escapedPath := strings.ReplaceAll(remotePath, "'", "'\\''")
+	if err := session.Start(fmt.Sprintf("scp -f '%s'", escapedPath)); err != nil {
 		return fmt.Errorf("failed to start scp command: %w", err)
 	}
 
