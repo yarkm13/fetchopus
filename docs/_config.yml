@@ -1,0 +1,5 @@
+theme: jekyll-theme-dinky
+title: Fetchopus
+description: A multiprotocol multithread file downloader written in Go, designed to handle large downloads jobs with resume capability.
+show_downloads: true
+#google_analytics: [Your Google Analytics tracking ID]

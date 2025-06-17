@@ -24,5 +24,5 @@ To resume a download:
 ## Building
 
 ```
-go build -o fetchopus
+make build
 ```
