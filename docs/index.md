@@ -35,9 +35,11 @@ ${releaseBody}
                 const curlCommandCell = row.insertCell(1);
 
                 assetNameCell.innerHTML = `<a href="${asset.browser_download_url}">${asset.name}</a>`;
+                const outputFileName = asset.name.endsWith('.exe') ? 'fetchopus.exe' : 'fetchopus';
+
                 curlCommandCell.innerHTML = `
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>
-curl -L "${asset.browser_download_url}" -o fetchopus
+curl -L "${asset.browser_download_url}" -o ${outputFileName}
 </code></pre></div></div>
 `;
             });
