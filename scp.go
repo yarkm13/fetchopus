@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -30,8 +31,21 @@ type SCPConnector struct {
 	creds  *Credentials
 }
 
+// knownHosts stores already verified host fingerprints
+var (
+	knownHosts   = make(map[string]string)
+	knownHostsMu sync.Mutex
+)
+
 var hostKeyVerificationCallback = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 	fingerprint := ssh.FingerprintSHA256(key)
+
+	knownHostsMu.Lock()
+	storedFingerprint, exists := knownHosts[hostname]
+	knownHostsMu.Unlock()
+	if exists && storedFingerprint == fingerprint {
+		return nil
+	}
 
 	fmt.Printf("\nThe authenticity of host '%s' can't be established.\n", hostname)
 	fmt.Printf("%s key fingerprint is %s\n", key.Type(), fingerprint)
@@ -45,6 +59,10 @@ var hostKeyVerificationCallback = func(hostname string, remote net.Addr, key ssh
 
 	response = strings.TrimSpace(strings.ToLower(response))
 	if response == "yes" || response == "y" {
+		// Save the verified fingerprint
+		knownHostsMu.Lock()
+		knownHosts[hostname] = fingerprint
+		knownHostsMu.Unlock()
 		return nil
 	}
 
@@ -125,17 +143,82 @@ func (s *SCPConnector) DownloadFile(remotePath, localBasePath string, basePath s
 	}
 	defer session.Close()
 
-	pr, pw := io.Pipe()
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stdout pipe: %w", err)
+	}
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stderr pipe: %w", err)
+	}
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stdin pipe: %w", err)
+	}
 
-	go func() {
-		defer pw.Close()
-		session.Stdout = pw
-		if err := session.Run(fmt.Sprintf("scp -f %s", remotePath)); err != nil {
-			log.Printf("SCP command failed: %v", err)
-		}
-	}()
+	if err := session.Start(fmt.Sprintf("scp -f %s", remotePath)); err != nil {
+		return fmt.Errorf("failed to start scp command: %w", err)
+	}
 
-	return saveRemoteFile(remotePath, localBasePath, basePath, pr)
+	writer := bufio.NewWriter(stdin)
+	reader := bufio.NewReader(stdout)
+
+	// send initial null byte
+	if err := writeByte(writer, 0); err != nil {
+		return fmt.Errorf("failed to write initial null byte: %w", err)
+	}
+
+	// read file metadata line (C0664 999999999 test.txt)
+	//                          └─┬─┘ └───┬───┘ └───┬───┘
+	//                            │       │         │
+	//                           mode    size    filename
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		slurp, _ := io.ReadAll(stderr)
+		return fmt.Errorf("failed to read file metadata: %w (%s)", err, string(slurp))
+	}
+
+	//var mode string
+	var size int64
+	//var filename string
+	fields := strings.SplitN(strings.TrimSpace(line), " ", 3)
+	if len(fields) != 3 {
+		return fmt.Errorf("unexpected SCP metadata format: %q", line)
+	}
+
+	// @todo respect mode?
+	//mode = strings.TrimPrefix(fields[0], "C")
+	size, err = strconv.ParseInt(fields[1], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid file size: %w", err)
+	}
+
+	//filename = fields[2]
+
+	// send acknowledgment
+	if err := writeByte(writer, 0); err != nil {
+		return fmt.Errorf("failed to acknowledge metadata: %w", err)
+	}
+
+	// create limited reader for exact file content
+	limited := io.LimitReader(reader, size)
+
+	err = saveRemoteFile(remotePath, localBasePath, basePath, limited)
+	if err != nil {
+		return err
+	}
+
+	// read and discard single byte (remote confirmation)
+	if b, err := reader.ReadByte(); err != nil || b != 0 {
+		return fmt.Errorf("unexpected trailing byte: %v", b)
+	}
+
+	// send final null byte
+	if err := writeByte(writer, 0); err != nil {
+		return fmt.Errorf("failed to send final null byte: %w", err)
+	}
+
+	return session.Wait()
 }
 
 func (s *SCPConnector) Close() error {
@@ -143,4 +226,11 @@ func (s *SCPConnector) Close() error {
 		s.creds.Clear()
 	}
 	return s.client.Close()
+}
+
+func writeByte(w *bufio.Writer, b byte) error {
+	if _, err := w.Write([]byte{b}); err != nil {
+		return err
+	}
+	return w.Flush()
 }
