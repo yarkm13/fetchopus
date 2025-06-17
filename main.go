@@ -83,6 +83,11 @@ func main() {
 
 	saveJobFile(job)
 
+	if !promptToContinue(job) {
+		log.Printf("Jobfile saved as %s. You can edit path there and resume the download providing --job %s option.", job.jobFile, job.jobFile)
+		return
+	}
+
 	// Securely clear password when it's no longer needed
 	defer func() {
 		secureWipe(password)
